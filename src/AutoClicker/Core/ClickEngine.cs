@@ -5,7 +5,7 @@ namespace AutoClicker.Core;
 
 /// <summary>
 /// クリック送出専用ワーカー。
-/// SendInput はすべてこのクラスの内部Task上で実行される。
+/// SendInput はすべてこのクラスの内部 Task 上で実行される。
 /// SemaphoreSlim(1,1) で多重起動を防止する。
 /// </summary>
 public sealed class ClickEngine : IDisposable
@@ -13,6 +13,7 @@ public sealed class ClickEngine : IDisposable
     public enum State { Stopped, Running, Stopping }
 
     private readonly SemaphoreSlim _semaphore = new(1, 1);
+    private readonly ManualResetEventSlim _completionEvent = new(true); // true = not running
     private CancellationTokenSource? _cts;
     private volatile State _state = State.Stopped;
 
@@ -30,6 +31,7 @@ public sealed class ClickEngine : IDisposable
             return false; // Already running
 
         _cts = new CancellationTokenSource();
+        _completionEvent.Reset();
         SetState(State.Running);
 
         var token = _cts.Token;
@@ -53,6 +55,7 @@ public sealed class ClickEngine : IDisposable
                 _cts?.Dispose();
                 _cts = null;
                 _semaphore.Release();
+                _completionEvent.Set(); // Signal AFTER semaphore release
             }
         });
 
@@ -129,7 +132,10 @@ public sealed class ClickEngine : IDisposable
     public void Dispose()
     {
         Stop();
+        // ワーカー完了を待ってからリソースを破棄する（最大5秒）
+        _completionEvent.Wait(TimeSpan.FromSeconds(5));
         _cts?.Dispose();
         _semaphore.Dispose();
+        _completionEvent.Dispose();
     }
 }

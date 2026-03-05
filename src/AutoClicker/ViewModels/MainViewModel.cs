@@ -15,19 +15,19 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private readonly HotkeyManager _hotkeyManager = new();
 
     // --- State ---
-    private string _statusText = "停止中";
+    private string _statusText = UiContract.StatusStopped;
     private bool _isRunning;
     private bool _isSingleMode = true;
     private int _clickTypeIndex; // 0=left, 1=right, 2=middle
-    private string _intervalMs = "100";
+    private string _intervalMs = UiContract.DefaultIntervalMs.ToString();
     private bool _isInfinite = true;
-    private string _fixedCount = "100";
-    private string _singleX = "0";
-    private string _singleY = "0";
+    private string _fixedCount = UiContract.DefaultCountFixed.ToString();
+    private string _singleX = UiContract.DefaultSingleX.ToString();
+    private string _singleY = UiContract.DefaultSingleY.ToString();
     private int _selectedPointIndex = -1;
-    private string _toggleHotkeyText = "F6";
-    private string _stopHotkeyText = "F7";
-    private bool _isResidentTray = true;
+    private string _toggleHotkeyText = UiContract.DefaultHotkeyToggle;
+    private string _stopHotkeyText = UiContract.DefaultHotkeyStop;
+    private bool _isResidentTray = UiContract.DefaultTrayEnabled;
     private bool _isCapturingToggleHotkey;
     private bool _isCapturingStopHotkey;
     private bool _isCapturing3s;
@@ -40,7 +40,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         private set { _statusText = value; OnPropertyChanged(nameof(StatusText)); }
     }
 
-    public string ModeText => IsSingleMode ? "単一点" : "複数点";
+    public string ModeText => IsSingleMode ? UiContract.ModeSingle : UiContract.ModeMulti;
 
     public bool IsRunning
     {
@@ -205,8 +205,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         DeletePointCommand = new RelayCommand(ExecuteDeletePoint, () => IsStopped && HasSelectedPoint);
         MovePointUpCommand = new RelayCommand(ExecuteMovePointUp, () => IsStopped && HasSelectedPoint && SelectedPointIndex > 0);
         MovePointDownCommand = new RelayCommand(ExecuteMovePointDown, () => IsStopped && HasSelectedPoint && SelectedPointIndex < MultiPoints.Count - 1);
-        ChangeToggleHotkeyCommand = new RelayCommand(() => { IsCapturingToggleHotkey = true; IsCapturingStopHotkey = false; });
-        ChangeStopHotkeyCommand = new RelayCommand(() => { IsCapturingStopHotkey = true; IsCapturingToggleHotkey = false; });
+        ChangeToggleHotkeyCommand = new RelayCommand(EnterToggleCapture);
+        ChangeStopHotkeyCommand = new RelayCommand(EnterStopCapture);
 
         _engine.StateChanged += OnEngineStateChanged;
         _hotkeyManager.ToggleRequested += OnToggleRequested;
@@ -215,22 +215,52 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         LoadSettings();
     }
 
+    // ── ホットキーキャプチャ開始（Suspend で HK 一時解除）──
+
+    private void EnterToggleCapture()
+    {
+        _hotkeyManager.Suspend();
+        IsCapturingToggleHotkey = true;
+        IsCapturingStopHotkey = false;
+    }
+
+    private void EnterStopCapture()
+    {
+        _hotkeyManager.Suspend();
+        IsCapturingStopHotkey = true;
+        IsCapturingToggleHotkey = false;
+    }
+
     // --- Engine event handlers ---
     private void OnEngineStateChanged(ClickEngine.State state)
     {
-        WpfApplication.Current?.Dispatcher.Invoke(() =>
+        // BeginInvoke を使い、Dispose 時のデッドロックを防止する
+        void UpdateUi()
         {
             bool running = state == ClickEngine.State.Running;
             IsRunning = running;
-            StatusText = running ? "実行中" : "停止中";
+            StatusText = running ? UiContract.StatusRunning : UiContract.StatusStopped;
             ErrorMessage = null;
-        });
+        }
+
+        var dispatcher = WpfApplication.Current?.Dispatcher;
+        if (dispatcher == null) return;
+
+        if (dispatcher.CheckAccess())
+            UpdateUi();
+        else
+            dispatcher.BeginInvoke(UpdateUi);
     }
 
     private void OnToggleRequested()
     {
-        WpfApplication.Current?.Dispatcher.Invoke(() =>
+        var dispatcher = WpfApplication.Current?.Dispatcher;
+        if (dispatcher == null) return;
+        dispatcher.BeginInvoke(() =>
         {
+            // キャプチャ中はホットキーイベントを無視
+            if (IsCapturingToggleHotkey || IsCapturingStopHotkey) return;
+
             if (IsRunning)
                 ExecuteStop();
             else
@@ -240,8 +270,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private void OnStopRequested()
     {
-        WpfApplication.Current?.Dispatcher.Invoke(() =>
+        var dispatcher = WpfApplication.Current?.Dispatcher;
+        if (dispatcher == null) return;
+        dispatcher.BeginInvoke(() =>
         {
+            if (IsCapturingToggleHotkey || IsCapturingStopHotkey) return;
+
             if (IsRunning)
                 ExecuteStop();
         });
@@ -322,7 +356,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private void ExecuteAddPointNow()
     {
         var (x, y) = CursorPositionProvider.GetCurrentPosition();
-        MultiPoints.Add(new ClickPoint(x, y, 0));
+        MultiPoints.Add(new ClickPoint(x, y, UiContract.DefaultExtraWaitMs));
     }
 
     private async void ExecuteAddPoint3s()
@@ -332,7 +366,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             await Task.Delay(3000);
             var (x, y) = CursorPositionProvider.GetCurrentPosition();
-            MultiPoints.Add(new ClickPoint(x, y, 0));
+            MultiPoints.Add(new ClickPoint(x, y, UiContract.DefaultExtraWaitMs));
         }
         finally
         {
@@ -376,6 +410,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>
     /// ホットキー変更中にキーが押されたときの処理。
     /// Window の PreviewKeyDown から呼ばれる。
+    /// 終了後に必ず Resume して HK を再登録する。
     /// </summary>
     public void HandleHotkeyCapture(Key key)
     {
@@ -383,6 +418,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             IsCapturingToggleHotkey = false;
             IsCapturingStopHotkey = false;
+            _hotkeyManager.Resume();
             return;
         }
 
@@ -396,10 +432,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             else
             {
                 ErrorMessage = error == "conflict"
-                    ? "ホットキーが重複しています。別のキーにしてください。"
-                    : "ホットキーとして使用できないキーです。";
+                    ? UiContract.ErrorHotkeyConflict
+                    : UiContract.ErrorHotkeyDisallowed;
             }
             IsCapturingToggleHotkey = false;
+            // Resume は TrySetToggleKey 内で RegisterAll 済みなので不要だが安全のため
+            _hotkeyManager.Resume();
         }
         else if (IsCapturingStopHotkey)
         {
@@ -411,24 +449,29 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             else
             {
                 ErrorMessage = error == "conflict"
-                    ? "ホットキーが重複しています。別のキーにしてください。"
-                    : "ホットキーとして使用できないキーです。";
+                    ? UiContract.ErrorHotkeyConflict
+                    : UiContract.ErrorHotkeyDisallowed;
             }
             IsCapturingStopHotkey = false;
+            _hotkeyManager.Resume();
         }
     }
 
     // --- Validation ---
     private bool ValidateInputs(out string? error)
     {
-        error = "入力値を確認してください。";
+        error = UiContract.ErrorInvalidInput;
 
-        if (!int.TryParse(_intervalMs, out int interval) || interval < 1 || interval > 600000)
+        if (!int.TryParse(_intervalMs, out int interval)
+            || interval < UiContract.IntervalMsMin
+            || interval > UiContract.IntervalMsMax)
             return false;
 
         if (!_isInfinite)
         {
-            if (!int.TryParse(_fixedCount, out int count) || count < 1 || count > 1000000)
+            if (!int.TryParse(_fixedCount, out int count)
+                || count < UiContract.CountFixedMin
+                || count > UiContract.CountFixedMax)
                 return false;
         }
 
@@ -444,7 +487,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
             foreach (var pt in MultiPoints)
             {
-                if (pt.ExtraWaitMs < 0 || pt.ExtraWaitMs > 600000)
+                if (pt.ExtraWaitMs < UiContract.ExtraWaitMsMin
+                    || pt.ExtraWaitMs > UiContract.ExtraWaitMsMax)
                     return false;
             }
         }
@@ -465,25 +509,38 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             "middle" => 2,
             _ => 0
         };
-        IntervalMs = s.IntervalMs.ToString();
+
+        // 範囲クランプ付きで復元
+        int interval = UiContract.ClampInterval(s.IntervalMs);
+        IntervalMs = interval.ToString();
+
         IsInfinite = s.CountMode == "infinite";
-        FixedCount = s.CountFixed.ToString();
+        int fixedCount = UiContract.ClampCountFixed(s.CountFixed);
+        FixedCount = fixedCount.ToString();
+
         SingleX = s.SingleX.ToString();
         SingleY = s.SingleY.ToString();
         IsResidentTray = s.ResidentTray;
 
         MultiPoints.Clear();
         foreach (var p in s.MultiPoints)
-            MultiPoints.Add(new ClickPoint(p.X, p.Y, p.ExtraWaitMs));
+        {
+            int ew = UiContract.ClampExtraWait(p.ExtraWaitMs);
+            MultiPoints.Add(new ClickPoint(p.X, p.Y, ew));
+        }
+
+        // ホットキー復元 — バリデーション付きフォールバック
+        Key toggleKey = Key.F6;
+        Key stopKey = Key.F7;
 
         if (Enum.TryParse<Key>(s.HotkeyToggle, out var tk))
-            _toggleHotkeyText = KeyToString(tk);
+            toggleKey = tk;
         if (Enum.TryParse<Key>(s.HotkeyStop, out var sk))
-            _stopHotkeyText = KeyToString(sk);
+            stopKey = sk;
 
-        // Hotkey registration deferred until Initialize is called with hwnd
-        _pendingToggleKey = tk;
-        _pendingStopKey = sk;
+        // 予約キーや重複は SetKeys 内部でデフォルトへフォールバックされる
+        _pendingToggleKey = toggleKey;
+        _pendingStopKey = stopKey;
     }
 
     private Key _pendingToggleKey = Key.F6;
@@ -499,6 +556,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     public void SaveSettings()
     {
+        // 保存時も範囲クランプ
+        int intervalVal = int.TryParse(_intervalMs, out int iv)
+            ? UiContract.ClampInterval(iv)
+            : UiContract.DefaultIntervalMs;
+        int countFixedVal = int.TryParse(_fixedCount, out int fc)
+            ? UiContract.ClampCountFixed(fc)
+            : UiContract.DefaultCountFixed;
+
         var s = new AppSettings
         {
             Mode = _isSingleMode ? "single" : "multi",
@@ -508,11 +573,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 2 => "middle",
                 _ => "left"
             },
-            IntervalMs = int.TryParse(_intervalMs, out int iv) ? iv : 100,
+            IntervalMs = intervalVal,
             CountMode = _isInfinite ? "infinite" : "fixed",
-            CountFixed = int.TryParse(_fixedCount, out int fc) ? fc : 100,
-            SingleX = int.TryParse(_singleX, out int sx) ? sx : 0,
-            SingleY = int.TryParse(_singleY, out int sy) ? sy : 0,
+            CountFixed = countFixedVal,
+            SingleX = int.TryParse(_singleX, out int sx) ? sx : UiContract.DefaultSingleX,
+            SingleY = int.TryParse(_singleY, out int sy) ? sy : UiContract.DefaultSingleY,
             ResidentTray = _isResidentTray,
             HotkeyToggle = _hotkeyManager.ToggleKey.ToString(),
             HotkeyStop = _hotkeyManager.StopKey.ToString(),
@@ -520,7 +585,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             {
                 X = p.X,
                 Y = p.Y,
-                ExtraWaitMs = p.ExtraWaitMs
+                ExtraWaitMs = UiContract.ClampExtraWait(p.ExtraWaitMs)
             }).ToList()
         };
 
