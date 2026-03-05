@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet new sln -n AutoClicker --force)",
+      "Bash(dotnet sln AutoClicker.sln add src/AutoClicker/AutoClicker.csproj)",
+      "Bash(\"C:/Program Files/dotnet/dotnet.exe\" --list-sdks)",
+      "Bash(\"C:/Program Files/dotnet/dotnet.exe\" --list-runtimes)",
+      "Bash(winget install Microsoft.DotNet.SDK.8 --accept-package-agreements --accept-source-agreements)",
+      "Bash(export PATH=\"/c/Program Files/dotnet:$PATH\")",
+      "Bash(dotnet build AutoClicker.sln)",
+      "Bash(dotnet build AutoClicker.sln --configuration Release)"
+    ]
+  }
+}

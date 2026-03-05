@@ -1,0 +1,80 @@
+{
+  "contract_version": "1.0.0",
+  "app": {
+    "window_title": "Auto Clicker (Safe)",
+    "tray_enabled_default": true
+  },
+  "labels": {
+    "status_prefix": "状態: ",
+    "status_stopped": "停止中",
+    "status_running": "実行中",
+    "mode_prefix": "モード: ",
+    "mode_single": "単一点",
+    "mode_multi": "複数点",
+    "next_in_prefix": "次まで: ",
+    "click_type": "クリック種別",
+    "click_type_left": "左クリック",
+    "click_type_right": "右クリック",
+    "click_type_middle": "中クリック",
+    "interval_ms": "間隔(ms)",
+    "count": "回数",
+    "count_infinite": "無限",
+    "count_fixed": "指定回数",
+    "single_coordinates": "座標",
+    "x": "X",
+    "y": "Y",
+    "get_now": "現在位置を取得",
+    "get_after_3s": "3秒後に取得",
+    "multi_points": "座標リスト",
+    "col_index": "#",
+    "col_x": "X",
+    "col_y": "Y",
+    "col_extra_wait_ms": "待機(ms)",
+    "add_now": "追加(現在位置)",
+    "add_after_3s": "追加(3秒後)",
+    "delete": "削除",
+    "move_up": "上へ",
+    "move_down": "下へ",
+    "hotkeys": "ホットキー",
+    "hotkey_toggle": "開始/停止",
+    "hotkey_stop": "停止",
+    "change": "変更",
+    "resident_tray": "タスクトレイに常駐する",
+    "btn_start": "開始",
+    "btn_stop": "停止",
+    "btn_exit": "終了",
+    "tray_show": "表示",
+    "tray_toggle": "開始/停止",
+    "tray_stop": "停止",
+    "tray_exit": "終了",
+    "note_negative_coords": "※ マルチモニタ環境では座標が負になる場合があります。"
+  },
+  "defaults": {
+    "mode": "single",
+    "click_type": "left",
+    "interval_ms": 100,
+    "count_mode": "infinite",
+    "count_fixed": 100,
+    "single_point": { "x": 0, "y": 0 },
+    "multi_points": [],
+    "per_point_extra_wait_ms_default": 0
+  },
+  "limits": {
+    "interval_ms_min": 1,
+    "interval_ms_max": 600000,
+    "count_fixed_min": 1,
+    "count_fixed_max": 1000000,
+    "extra_wait_ms_min": 0,
+    "extra_wait_ms_max": 600000
+  },
+  "hotkeys": {
+    "toggle_start_stop": { "default": "F6" },
+    "stop": { "default": "F7" },
+    "reserved_disallow": ["LWIN", "RWIN"]
+  },
+  "errors": {
+    "invalid_input": "入力値を確認してください。",
+    "hotkey_conflict": "ホットキーが重複しています。別のキーにしてください。",
+    "hotkey_disallowed": "ホットキーとして使用できないキーです。"
+  }
+}
