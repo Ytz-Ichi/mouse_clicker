@@ -70,8 +70,12 @@ public sealed class ClickEngine : IDisposable
         if (_state == State.Running)
         {
             SetState(State.Stopping);
-            _cts?.Cancel();
         }
+
+        // ステートに関係なく常にキャンセルを試行する。
+        // 既に Stopping/Stopped でも CTS が生きていれば確実に止める。
+        try { _cts?.Cancel(); }
+        catch (ObjectDisposedException) { }
     }
 
     private void SetState(State newState)

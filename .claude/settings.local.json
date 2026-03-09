@@ -8,7 +8,8 @@
       "Bash(winget install Microsoft.DotNet.SDK.8 --accept-package-agreements --accept-source-agreements)",
       "Bash(export PATH=\"/c/Program Files/dotnet:$PATH\")",
       "Bash(dotnet build AutoClicker.sln)",
-      "Bash(dotnet build AutoClicker.sln --configuration Release)"
+      "Bash(dotnet build AutoClicker.sln --configuration Release)",
+      "Bash(dotnet build AutoClicker.sln -c Release)"
     ]
   }
 }

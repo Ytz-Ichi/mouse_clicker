@@ -254,31 +254,21 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private void OnToggleRequested()
     {
-        var dispatcher = WpfApplication.Current?.Dispatcher;
-        if (dispatcher == null) return;
-        dispatcher.BeginInvoke(() =>
-        {
-            // キャプチャ中はホットキーイベントを無視
-            if (IsCapturingToggleHotkey || IsCapturingStopHotkey) return;
+        // WndProc（UIスレッド）から直接呼ばれる。BeginInvoke 遅延を排除。
+        if (IsCapturingToggleHotkey || IsCapturingStopHotkey) return;
 
-            if (IsRunning)
-                ExecuteStop();
-            else
-                ExecuteStart();
-        });
+        if (_engine.CurrentState == ClickEngine.State.Running)
+            _engine.Stop();
+        else if (_engine.CurrentState == ClickEngine.State.Stopped)
+            ExecuteStart();
     }
 
     private void OnStopRequested()
     {
-        var dispatcher = WpfApplication.Current?.Dispatcher;
-        if (dispatcher == null) return;
-        dispatcher.BeginInvoke(() =>
-        {
-            if (IsCapturingToggleHotkey || IsCapturingStopHotkey) return;
+        if (IsCapturingToggleHotkey || IsCapturingStopHotkey) return;
 
-            if (IsRunning)
-                ExecuteStop();
-        });
+        // 状態チェックなしで常に Stop を呼ぶ（Stop 内部でガード済み）
+        _engine.Stop();
     }
 
     // --- Command implementations ---
